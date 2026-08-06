@@ -94,3 +94,95 @@ line two
         _ => panic!("expected fallback conflict"),
     }
 }
+
+#[test]
+fn nested_marker_in_theirs_falls_back_to_one_manual_region() {
+    let input = "\
+<<<<<<< HEAD
+ours1
+=======
+theirs1
+<<<<<<< HEAD
+ours2
+=======
+theirs2
+>>>>>>> branch
+";
+    let regions = parse_markers(input);
+    assert_eq!(regions.len(), 1);
+    match &regions[0] {
+        ParsedRegion::Conflict { ours, theirs, base } => {
+            // Fallback: whole content becomes the ours side, empty theirs.
+            assert!(ours.iter().any(|l| l.contains("theirs1")));
+            assert!(ours.iter().any(|l| l.contains("theirs2")));
+            assert_eq!(theirs, &Vec::<String>::new());
+            assert_eq!(base, &None);
+        }
+        _ => panic!("expected fallback conflict"),
+    }
+}
+
+#[test]
+fn nested_marker_in_base_falls_back_to_one_manual_region() {
+    let input = "\
+<<<<<<< HEAD
+ours
+||||||| base
+original
+<<<<<<< HEAD
+stray nested start
+=======
+theirs
+>>>>>>> branch
+";
+    let regions = parse_markers(input);
+    assert_eq!(regions.len(), 1);
+    match &regions[0] {
+        ParsedRegion::Conflict { ours, theirs, base } => {
+            assert!(ours.iter().any(|l| l.contains("original")));
+            assert!(ours.iter().any(|l| l.contains("stray nested start")));
+            assert_eq!(theirs, &Vec::<String>::new());
+            assert_eq!(base, &None);
+        }
+        _ => panic!("expected fallback conflict"),
+    }
+}
+
+#[test]
+fn empty_ours_and_theirs_sections_parse_correctly() {
+    let input = "\
+<<<<<<< HEAD
+=======
+>>>>>>> branch
+";
+    let regions = parse_markers(input);
+    assert_eq!(regions.len(), 1);
+    match &regions[0] {
+        ParsedRegion::Conflict { ours, theirs, base } => {
+            assert_eq!(ours, &Vec::<String>::new());
+            assert_eq!(theirs, &Vec::<String>::new());
+            assert_eq!(base, &None);
+        }
+        _ => panic!("expected conflict"),
+    }
+}
+
+#[test]
+fn malformed_diff3_missing_sep_after_base_falls_back() {
+    let input = "\
+<<<<<<< HEAD
+ours
+||||||| base
+original with no following separator
+";
+    let regions = parse_markers(input);
+    assert_eq!(regions.len(), 1);
+    match &regions[0] {
+        ParsedRegion::Conflict { ours, theirs, base } => {
+            assert!(ours.iter().any(|l| l.contains("original with no following separator")));
+            assert_eq!(theirs, &Vec::<String>::new());
+            assert_eq!(base, &None);
+        }
+        _ => panic!("expected fallback conflict"),
+    }
+}

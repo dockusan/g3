@@ -58,54 +58,53 @@ fn starts_with_marker(line: &str, marker: &str) -> bool {
     line.starts_with(marker)
 }
 
-/// Parse one conflict starting at `start` (the `<<<<<<<` line).
-/// Returns the region and the index just past the closing `>>>>>>>`.
-fn parse_conflict(lines: &[&str], start: usize) -> Option<(ParsedRegion, usize)> {
-    let mut ours: Vec<String> = Vec::new();
-    let mut base: Option<Vec<String>> = None;
-    let mut theirs: Vec<String> = Vec::new();
-
-    let mut i = start + 1;
-    // ours until BASE or SEP
-    while i < lines.len()
-        && !starts_with_marker(lines[i], BASE)
-        && !starts_with_marker(lines[i], SEP)
-    {
-        if starts_with_marker(lines[i], START) || starts_with_marker(lines[i], END) {
+/// Collect lines starting at `i` until a line matching one of `terminators` is
+/// found. If a line matches one of `reject` first, the marker sequence is
+/// malformed/out-of-place, so `None` is returned (triggering the caller's
+/// fallback). Also returns `None` if EOF is reached before a terminator.
+fn collect_until(
+    lines: &[&str],
+    mut i: usize,
+    terminators: &[&str],
+    reject: &[&str],
+) -> Option<(Vec<String>, usize)> {
+    let mut acc: Vec<String> = Vec::new();
+    while i < lines.len() && !terminators.iter().any(|t| starts_with_marker(lines[i], t)) {
+        if reject.iter().any(|m| starts_with_marker(lines[i], m)) {
             return None; // nested/unexpected marker
         }
-        ours.push(lines[i].to_string());
+        acc.push(lines[i].to_string());
         i += 1;
     }
     if i >= lines.len() {
-        return None;
+        return None; // no terminator before EOF
     }
+    Some((acc, i))
+}
+
+/// Parse one conflict starting at `start` (the `<<<<<<<` line).
+/// Returns the region and the index just past the closing `>>>>>>>`.
+fn parse_conflict(lines: &[&str], start: usize) -> Option<(ParsedRegion, usize)> {
+    let mut base: Option<Vec<String>> = None;
+
+    // ours until BASE or SEP; a stray START/END here is unexpected.
+    let (ours, mut i) = collect_until(lines, start + 1, &[BASE, SEP], &[START, END])?;
+
     // optional base section
     if starts_with_marker(lines[i], BASE) {
-        i += 1;
-        let mut b: Vec<String> = Vec::new();
-        while i < lines.len() && !starts_with_marker(lines[i], SEP) {
-            b.push(lines[i].to_string());
-            i += 1;
-        }
-        if i >= lines.len() {
-            return None;
-        }
+        // base until SEP; a stray START/END/BASE here is unexpected.
+        let (b, next) = collect_until(lines, i + 1, &[SEP], &[START, END, BASE])?;
         base = Some(b);
+        i = next;
     }
     // now on SEP
     if !starts_with_marker(lines[i], SEP) {
         return None;
     }
     i += 1;
-    // theirs until END
-    while i < lines.len() && !starts_with_marker(lines[i], END) {
-        theirs.push(lines[i].to_string());
-        i += 1;
-    }
-    if i >= lines.len() {
-        return None; // no closing marker
-    }
+    // theirs until END; a stray START/BASE/SEP here is unexpected.
+    let (theirs, i) = collect_until(lines, i, &[END], &[START, BASE, SEP])?;
+
     // lines[i] is END
     Some((ParsedRegion::Conflict { ours, theirs, base }, i + 1))
 }
