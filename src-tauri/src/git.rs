@@ -43,12 +43,9 @@ pub fn list_conflicts(repo: &Repository) -> Result<Vec<ConflictFile>, git2::Erro
         let ours_status = side_status(c.ancestor.is_some(), c.our.is_some());
         let theirs_status = side_status(c.ancestor.is_some(), c.their.is_some());
 
-        let is_binary = c
-            .our
-            .as_ref()
-            .map(|e| is_binary_blob(repo, e.id))
-            .or_else(|| c.their.as_ref().map(|e| is_binary_blob(repo, e.id)))
-            .unwrap_or(false);
+        let our_binary = c.our.as_ref().map_or(false, |e| is_binary_blob(repo, e.id));
+        let their_binary = c.their.as_ref().map_or(false, |e| is_binary_blob(repo, e.id));
+        let is_binary = our_binary || their_binary;
 
         out.push(ConflictFile {
             path,

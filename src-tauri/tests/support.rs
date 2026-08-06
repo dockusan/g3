@@ -29,6 +29,10 @@ fn write(path: &Path, name: &str, contents: &str) {
     fs::write(path.join(name), contents).unwrap();
 }
 
+fn write_bytes(path: &Path, name: &str, contents: &[u8]) {
+    fs::write(path.join(name), contents).unwrap();
+}
+
 /// Build a repo where `file.txt` is modified differently on `main` and `feature`,
 /// then merge feature into main to produce a conflict in the working tree.
 pub fn modify_modify_conflict() -> Fixture {
@@ -59,6 +63,55 @@ pub fn modify_modify_conflict() -> Fixture {
     commit_all(&repo, "feature change");
 
     // back to the original default branch, change line2 differently
+    repo.set_head(&default_branch).unwrap();
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
+    write(dir.path(), "file.txt", "line1\nMAIN\nline3\n");
+    commit_all(&repo, "main change");
+
+    // merge feature -> produces conflict
+    let feature_commit_id = repo
+        .find_branch("feature", git2::BranchType::Local).unwrap()
+        .get().peel_to_commit().unwrap()
+        .id();
+    {
+        let annotated = repo.find_annotated_commit(feature_commit_id).unwrap();
+        let mut opts = git2::MergeOptions::new();
+        repo.merge(&[&annotated], Some(&mut opts), None).unwrap();
+    }
+
+    Fixture { dir, repo }
+}
+
+/// Like `modify_modify_conflict`, but `feature` (which becomes "theirs" from the
+/// perspective of the merge) writes binary content (containing a null byte) for
+/// `file.txt`, while `main` (which becomes "ours") writes ordinary text.
+/// This produces a genuinely mixed binary/text conflict: exercises the case
+/// where the "ours" side is text but the "theirs" side is binary.
+pub fn binary_modify_modify_conflict() -> Fixture {
+    let dir = TempDir::new().unwrap();
+    let repo = Repository::init(dir.path()).unwrap();
+
+    write(dir.path(), "file.txt", "line1\nline2\nline3\n");
+    commit_all(&repo, "base");
+
+    let default_branch = repo
+        .head()
+        .unwrap()
+        .name()
+        .expect("HEAD ref name should be valid UTF-8")
+        .to_string();
+
+    // feature branch changes file.txt to binary content
+    {
+        let base_commit = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("feature", &base_commit, false).unwrap();
+    }
+    repo.set_head("refs/heads/feature").unwrap();
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
+    write_bytes(dir.path(), "file.txt", &[0u8, 1, 2, 3, b'B', b'I', b'N']);
+    commit_all(&repo, "feature binary change");
+
+    // back to the original default branch, change line2 differently (text)
     repo.set_head(&default_branch).unwrap();
     repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
     write(dir.path(), "file.txt", "line1\nMAIN\nline3\n");

@@ -25,6 +25,17 @@ fn reads_all_three_stages() {
 }
 
 #[test]
+fn flags_conflict_as_binary_when_only_theirs_side_is_binary() {
+    let fx = support::binary_modify_modify_conflict();
+    let conflicts = git::list_conflicts(&fx.repo).unwrap();
+    assert_eq!(conflicts.len(), 1);
+    assert_eq!(conflicts[0].path, "file.txt");
+    // "ours" (main) is text, "theirs" (feature) is binary; is_binary must be true
+    // because either side being binary should mark the conflict as binary.
+    assert!(conflicts[0].is_binary);
+}
+
+#[test]
 fn discovers_repo_from_subdirectory() {
     let fx = support::modify_modify_conflict();
     let sub = fx.dir.path().join("nested");
