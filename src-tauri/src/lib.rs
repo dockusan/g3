@@ -1,6 +1,7 @@
 pub mod model;
 pub mod conflict;
 pub mod diff;
+pub mod git;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
