@@ -31,8 +31,10 @@ export function applyDecision(
   return { ...decisions, [id]: { kind, manualLines } };
 }
 
-export function countRemaining(decisions: Decisions): number {
-  return Object.values(decisions).filter((d) => d.kind === "unresolved").length;
+export function countRemaining(regions: Region[], decisions: Decisions): number {
+  return regions.filter(
+    (r) => r.kind === "conflict" && (decisions[r.id]?.kind ?? "unresolved") === "unresolved",
+  ).length;
 }
 
 /** Resolved text for one conflict region given its decision. */
