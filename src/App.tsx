@@ -1,51 +1,81 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
+import { open } from "@tauri-apps/plugin-dialog";
+import type { ConflictFile, ConflictDocument } from "./types";
+import { listConflicts, setRepo, loadConflict, saveResolution } from "./api";
+import { Overview } from "./screens/Overview";
+import { MergeEditor } from "./screens/MergeEditor";
 import "./App.css";
 
-function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+type View =
+  | { screen: "picker" }
+  | { screen: "overview" }
+  | { screen: "editor"; doc: ConflictDocument };
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+export default function App() {
+  const [conflicts, setConflicts] = useState<ConflictFile[]>([]);
+  const [view, setView] = useState<View>({ screen: "overview" });
+  const [error, setError] = useState<string | null>(null);
+
+  // On launch, try the cwd repo (CLI-invoked mode).
+  useEffect(() => {
+    listConflicts()
+      .then((c) => { setConflicts(c); setView({ screen: "overview" }); })
+      .catch(() => setView({ screen: "picker" }));
+  }, []);
+
+  const pickRepo = async () => {
+    const dir = await open({ directory: true });
+    if (typeof dir === "string") {
+      try {
+        const c = await setRepo(dir);
+        setConflicts(c);
+        setView({ screen: "overview" });
+      } catch (e) {
+        setError(String(e));
+      }
+    }
+  };
+
+  const openFile = async (path: string) => {
+    try {
+      const doc = await loadConflict(path);
+      setView({ screen: "editor", doc });
+    } catch (e) {
+      setError(String(e));
+    }
+  };
+
+  const save = async (content: string) => {
+    if (view.screen !== "editor") return;
+    try {
+      const c = await saveResolution(view.doc.path, content);
+      setConflicts(c);
+      setView({ screen: "overview" });
+    } catch (e) {
+      setError(String(e));
+    }
+  };
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
-
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
+    <div className="app">
+      {error && <div className="error" onClick={() => setError(null)}>{error}</div>}
+      {view.screen === "picker" && (
+        <div className="picker">
+          <p>Open a git repository with merge conflicts.</p>
+          <button onClick={pickRepo}>Choose Repository…</button>
+        </div>
+      )}
+      {view.screen === "overview" && (
+        <Overview conflicts={conflicts} onOpen={openFile} />
+      )}
+      {view.screen === "editor" && (
+        <MergeEditor
+          key={view.doc.path}
+          doc={view.doc}
+          onSave={save}
+          onCancel={() => setView({ screen: "overview" })}
         />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
-    </main>
+      )}
+    </div>
   );
 }
-
-export default App;
