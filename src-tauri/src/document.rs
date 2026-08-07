@@ -1,6 +1,6 @@
 use crate::conflict::{parse_markers, ParsedRegion};
 use crate::diff::line_diff;
-use crate::git::branch_labels;
+use crate::git::{branch_labels, ensure_safe_relative_path};
 use crate::model::{ConflictDocument, Region};
 use git2::Repository;
 
@@ -8,6 +8,8 @@ use git2::Repository;
 /// enrich each conflict with diff ops (ours/theirs vs base, or vs each other if no base),
 /// and attach branch labels + a content hash for external-change detection.
 pub fn load(repo: &Repository, path: &str) -> Result<ConflictDocument, git2::Error> {
+    ensure_safe_relative_path(path)?;
+
     let workdir = repo
         .workdir()
         .ok_or_else(|| git2::Error::from_str("bare repo has no working directory"))?;

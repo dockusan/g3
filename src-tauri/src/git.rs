@@ -12,6 +12,24 @@ pub fn discover_repo(start: &Path) -> Result<Repository, git2::Error> {
     Repository::discover(start)
 }
 
+/// Guard against path traversal / absolute paths: reject anything that isn't
+/// a plain relative path with no `..` (ParentDir) components. Shared by
+/// `writer::save_resolution` and `document::load`, both of which join the
+/// caller-supplied path onto the repo's workdir.
+pub fn ensure_safe_relative_path(path: &str) -> Result<(), git2::Error> {
+    let candidate = Path::new(path);
+    if candidate.is_absolute()
+        || candidate
+            .components()
+            .any(|c| c == std::path::Component::ParentDir)
+    {
+        return Err(git2::Error::from_str(
+            "invalid path: must be relative and contain no '..' components",
+        ));
+    }
+    Ok(())
+}
+
 fn blob_to_string(repo: &Repository, oid: git2::Oid) -> Option<String> {
     let blob = repo.find_blob(oid).ok()?;
     Some(String::from_utf8_lossy(blob.content()).to_string())

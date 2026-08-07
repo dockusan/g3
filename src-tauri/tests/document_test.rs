@@ -26,3 +26,17 @@ fn builds_document_with_one_conflict_region() {
         }
     }
 }
+
+#[test]
+fn rejects_absolute_path() {
+    let fx = support::modify_modify_conflict();
+    let result = document::load(&fx.repo, "/etc/passwd");
+    assert!(result.is_err());
+}
+
+#[test]
+fn rejects_path_with_parent_dir_component() {
+    let fx = support::modify_modify_conflict();
+    let result = document::load(&fx.repo, "../outside.txt");
+    assert!(result.is_err());
+}
