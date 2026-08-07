@@ -7,36 +7,39 @@ import { MergeEditor } from "./screens/MergeEditor";
 import "./App.css";
 
 type View =
+  | { screen: "loading" }
   | { screen: "picker" }
   | { screen: "overview" }
   | { screen: "editor"; doc: ConflictDocument };
 
 export default function App() {
   const [conflicts, setConflicts] = useState<ConflictFile[]>([]);
-  const [view, setView] = useState<View>({ screen: "overview" });
+  const [view, setView] = useState<View>({ screen: "loading" });
   const [error, setError] = useState<string | null>(null);
 
   // On launch, try the cwd repo (CLI-invoked mode).
   useEffect(() => {
     listConflicts()
       .then((c) => { setConflicts(c); setView({ screen: "overview" }); })
-      .catch(() => setView({ screen: "picker" }));
+      .catch((e) => { setError(String(e)); setView({ screen: "picker" }); });
   }, []);
 
   const pickRepo = async () => {
-    const dir = await open({ directory: true });
-    if (typeof dir === "string") {
-      try {
+    setError(null);
+    try {
+      const dir = await open({ directory: true });
+      if (typeof dir === "string") {
         const c = await setRepo(dir);
         setConflicts(c);
         setView({ screen: "overview" });
-      } catch (e) {
-        setError(String(e));
       }
+    } catch (e) {
+      setError(String(e));
     }
   };
 
   const openFile = async (path: string) => {
+    setError(null);
     try {
       const doc = await loadConflict(path);
       setView({ screen: "editor", doc });
@@ -47,6 +50,7 @@ export default function App() {
 
   const save = async (content: string) => {
     if (view.screen !== "editor") return;
+    setError(null);
     try {
       const c = await saveResolution(view.doc.path, content);
       setConflicts(c);
@@ -59,6 +63,7 @@ export default function App() {
   return (
     <div className="app">
       {error && <div className="error" onClick={() => setError(null)}>{error}</div>}
+      {view.screen === "loading" && <div className="loading">Loading…</div>}
       {view.screen === "picker" && (
         <div className="picker">
           <p>Open a git repository with merge conflicts.</p>
