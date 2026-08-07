@@ -4,18 +4,23 @@ pub mod diff;
 pub mod document;
 pub mod git;
 pub mod writer;
-
-// Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
+pub mod commands;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // CLI-invoked: use current working directory as the initial repo candidate.
+    let initial = std::env::current_dir().ok();
+
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![greet])
+        .plugin(tauri_plugin_dialog::init())
+        .manage(commands::AppState { repo_path: std::sync::Mutex::new(initial) })
+        .invoke_handler(tauri::generate_handler![
+            commands::set_repo,
+            commands::list_conflicts,
+            commands::load_conflict,
+            commands::save_resolution,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
