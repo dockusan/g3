@@ -1,6 +1,6 @@
 use crate::conflict::{parse_markers, ParsedRegion};
 use crate::diff::line_diff;
-use crate::git::{branch_labels, read_stages};
+use crate::git::branch_labels;
 use crate::model::{ConflictDocument, Region};
 use git2::Repository;
 
@@ -15,8 +15,6 @@ pub fn load(repo: &Repository, path: &str) -> Result<ConflictDocument, git2::Err
         .map_err(|e| git2::Error::from_str(&format!("read failed: {e}")))?;
 
     let (ours_label, theirs_label) = branch_labels(repo);
-    // Stage blobs are available for future word-diff use; base drives line-diff below.
-    let _stages = read_stages(repo, path)?;
 
     let parsed = parse_markers(&raw);
     let mut regions = Vec::new();
