@@ -4,7 +4,6 @@ import {
   countRemaining,
   serializeResult,
   applyDecision,
-  type Decision,
 } from "./panes";
 import type { Region } from "../types";
 
