@@ -17,7 +17,7 @@ export default function App() {
   const [view, setView] = useState<View>({ screen: "loading" });
   const [error, setError] = useState<string | null>(null);
 
-  // On launch, try the cwd repo (CLI-invoked mode).
+  // On launch, try the repo from `g3 [path]` / `--repo`, else cwd.
   useEffect(() => {
     listConflicts()
       .then((c) => { setConflicts(c); setView({ screen: "overview" }); })

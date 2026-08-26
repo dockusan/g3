@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+INVOKE_CWD="$(pwd)"
+
+abs_path() {
+  local p="$1"
+  case "$p" in
+    /*) printf '%s\n' "$p" ;;
+    *) printf '%s/%s\n' "$INVOKE_CWD" "$p" ;;
+  esac
+}
+
+ARGS=()
+if [[ $# -eq 0 ]]; then
+  ARGS=(--repo "$INVOKE_CWD")
+elif [[ "$1" == "--repo" ]]; then
+  if [[ $# -lt 2 ]]; then
+    echo "g3: --repo requires a path" >&2
+    exit 1
+  fi
+  REPO="$(abs_path "$2")"
+  shift 2
+  ARGS=(--repo "$REPO" "$@")
+elif [[ "$1" == -* ]]; then
+  ARGS=(--repo "$INVOKE_CWD" "$@")
+else
+  REPO="$(abs_path "$1")"
+  shift
+  ARGS=(--repo "$REPO" "$@")
+fi
+
+RELEASE="$ROOT/src-tauri/target/release/tauri-app"
+MACOS_APP="$ROOT/src-tauri/target/release/bundle/macos/tauri-app.app/Contents/MacOS/tauri-app"
+
+# Prefer a release build. Do not use target/debug — cargo test creates that
+# binary without the Vite dev server, so the window would fail to load.
+if [[ -x "$RELEASE" ]]; then
+  exec "$RELEASE" "${ARGS[@]}"
+fi
+if [[ -x "$MACOS_APP" ]]; then
+  exec "$MACOS_APP" "${ARGS[@]}"
+fi
+
+cd "$ROOT"
+# `tauri dev -- [runnerArgs] -- [appArgs]`. pnpm exec avoids pnpm eating a `--`.
+exec pnpm exec tauri dev -- -- "${ARGS[@]}"

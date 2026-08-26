@@ -16,7 +16,7 @@ This is a manual procedure — it requires a GUI environment and cannot be autom
    git commit -am main
    git merge feature   # produces a conflict
    ```
-2. From the tool's project dir (`/Users/ducanguyen/THREAD/learn-ai`), run: `pnpm tauri dev`. In this dev mode the app launches from the project's own cwd — to test true CLI-invoked launch against `/tmp/mt-demo`, build a release binary (`pnpm tauri build`) and run the resulting binary from inside `/tmp/mt-demo`.
+2. From `/tmp/mt-demo`, run `g3` (or from this project: `./bin/g3 /tmp/mt-demo`). The window should open against the conflicted repo, not this project's own cwd.
 3. Expected: overview lists `file.txt` as Modified / Modified.
 4. Double-click it → 3-pane editor shows MAIN (left pane, titled with your current branch name, e.g. "main") and FEATURE (right pane, titled with the merged-in branch name, e.g. "feature") — pane titles come from git branch names, not the literal words "Yours"/"Theirs" (those literal labels only appear as the Overview table's column headers). Result shows conflict markers, "1 conflict(s) remaining", Apply disabled.
 5. Click **Accept Left** → Result shows `line1 / MAIN / line3`; header says "No changes. Resolved."; Apply becomes enabled.

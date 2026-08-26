@@ -5,11 +5,15 @@ pub mod document;
 pub mod git;
 pub mod writer;
 pub mod commands;
+pub mod cli;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // CLI-invoked: use current working directory as the initial repo candidate.
-    let initial = std::env::current_dir().ok();
+    // CLI-invoked: `g3 [path]` / `g3 --repo <path>`, else the process cwd.
+    let initial = std::env::current_dir().ok().map(|cwd| {
+        let args: Vec<String> = std::env::args().collect();
+        cli::resolve_repo_path(&args, &cwd)
+    });
 
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
