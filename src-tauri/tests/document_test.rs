@@ -21,9 +21,13 @@ fn blue_and_red_fixture_has_both() {
     let doc = document::load(&fx.repo, "file.txt").unwrap();
     assert!(doc.change_count >= 1);
     assert_eq!(doc.conflict_count, 1);
-    assert!(doc.hunks.iter().any(|h| h.kind.is_blue()));
-    assert!(doc.hunks.iter().any(|h| h.kind.is_conflict()));
+    let blue = doc.hunks.iter().find(|h| h.kind.is_blue()).unwrap();
+    assert!(blue.left_lines.iter().any(|l| l.contains("BLUE")));
+    let conflict = doc.hunks.iter().find(|h| h.kind.is_conflict()).unwrap();
+    assert!(conflict.left_lines.iter().any(|l| l.contains("MAIN")));
+    assert!(conflict.right_lines.iter().any(|l| l.contains("FEATURE")));
 }
+
 
 #[test]
 fn rejects_absolute_path() {

@@ -243,6 +243,102 @@ fn classify(has_left: bool, has_right: bool, left_lines: &[String], right_lines:
     }
 }
 
+fn lcs_len(a: &str, b: &str) -> usize {
+    let a: Vec<char> = a.chars().collect();
+    let b: Vec<char> = b.chars().collect();
+    let (m, n) = (a.len(), b.len());
+    if m == 0 || n == 0 {
+        return 0;
+    }
+    let mut prev = vec![0usize; n + 1];
+    let mut cur = vec![0usize; n + 1];
+    for i in 1..=m {
+        for j in 1..=n {
+            cur[j] = if a[i - 1] == b[j - 1] {
+                prev[j - 1] + 1
+            } else {
+                prev[j].max(cur[j - 1])
+            };
+        }
+        std::mem::swap(&mut prev, &mut cur);
+        cur.fill(0);
+    }
+    prev[n]
+}
+
+fn lcs_ratio(a: &str, b: &str) -> f64 {
+    let denom = a.len().max(b.len());
+    if denom == 0 {
+        return 1.0;
+    }
+    lcs_len(a, b) as f64 / denom as f64
+}
+
+fn unique_index<T: PartialOrd>(vals: &[T], prefer_max: bool) -> Option<usize> {
+    let mut best = 0usize;
+    let mut tied = false;
+    for i in 1..vals.len() {
+        let better = if prefer_max {
+            vals[i] > vals[best]
+        } else {
+            vals[i] < vals[best]
+        };
+        let equal = vals[i] == vals[best];
+        if better {
+            best = i;
+            tied = false;
+        } else if equal {
+            tied = true;
+        }
+    }
+    if tied {
+        None
+    } else {
+        Some(best)
+    }
+}
+
+/// Place extra lines on the longer side as edge inserts when a unique core
+/// window of `short.len()` lines can be identified as the 1:1 conflict.
+///
+/// Exact matches to the other side / base win. Else a window that clearly
+/// resembles the other side. Else (all unrelated) the unique *most different*
+/// window — extras sit at the edge. Tied windows → no peel (true conflict).
+fn unique_core_offset(long: &[String], short: &[String], base: &[String]) -> Option<usize> {
+    if short.len() != base.len() || short.is_empty() || long.len() <= short.len() {
+        return None;
+    }
+    let extra = long.len() - short.len();
+    let mut exact = Vec::with_capacity(extra + 1);
+    let mut weak = Vec::with_capacity(extra + 1);
+    for off in 0..=extra {
+        let core = &long[off..off + short.len()];
+        let mut ex = 0i32;
+        let mut w = 0.0f64;
+        for i in 0..short.len() {
+            if core[i] == short[i] {
+                ex += 2;
+            } else if core[i] == base[i] {
+                ex += 1;
+            }
+            w += lcs_ratio(&core[i], &short[i]);
+        }
+        exact.push(ex);
+        weak.push(w);
+    }
+    if let Some(off) = unique_index(&exact, true) {
+        if exact[off] > 0 {
+            return Some(off);
+        }
+    }
+    if let Some(off) = unique_index(&weak, true) {
+        if weak[off] >= 0.5 * short.len() as f64 {
+            return Some(off);
+        }
+    }
+    unique_index(&weak, false)
+}
+
 fn emit(
     hunks: &mut Vec<Hunk>,
     next_id: &mut u32,
@@ -251,38 +347,65 @@ fn emit(
     left_lines: Vec<String>,
     right_lines: Vec<String>,
 ) {
-    // Adjacent one-sided inserts can be fused into a replace of the following
-    // line. Peel them back out so a left-only extra line stays blue.
     if kind == HunkKind::Conflict && !base_lines.is_empty() {
         if left_lines.len() > base_lines.len() && right_lines.len() == base_lines.len() {
-            let extra = left_lines.len() - base_lines.len();
-            let prefix = left_lines[..extra].to_vec();
-            let rest = left_lines[extra..].to_vec();
-            emit(
-                hunks,
-                next_id,
-                HunkKind::LeftChange,
-                Vec::new(),
-                prefix,
-                Vec::new(),
-            );
-            emit(hunks, next_id, HunkKind::Conflict, base_lines, rest, right_lines);
-            return;
-        }
-        if right_lines.len() > base_lines.len() && left_lines.len() == base_lines.len() {
-            let extra = right_lines.len() - base_lines.len();
-            let prefix = right_lines[..extra].to_vec();
-            let rest = right_lines[extra..].to_vec();
-            emit(
-                hunks,
-                next_id,
-                HunkKind::RightChange,
-                Vec::new(),
-                Vec::new(),
-                prefix,
-            );
-            emit(hunks, next_id, HunkKind::Conflict, base_lines, left_lines, rest);
-            return;
+            if let Some(off) = unique_core_offset(&left_lines, &right_lines, &base_lines) {
+                let core_len = base_lines.len();
+                let prefix = left_lines[..off].to_vec();
+                let core = left_lines[off..off + core_len].to_vec();
+                let suffix = left_lines[off + core_len..].to_vec();
+                if !prefix.is_empty() {
+                    emit(
+                        hunks,
+                        next_id,
+                        HunkKind::LeftChange,
+                        Vec::new(),
+                        prefix,
+                        Vec::new(),
+                    );
+                }
+                emit(hunks, next_id, HunkKind::Conflict, base_lines, core, right_lines);
+                if !suffix.is_empty() {
+                    emit(
+                        hunks,
+                        next_id,
+                        HunkKind::LeftChange,
+                        Vec::new(),
+                        suffix,
+                        Vec::new(),
+                    );
+                }
+                return;
+            }
+        } else if right_lines.len() > base_lines.len() && left_lines.len() == base_lines.len() {
+            if let Some(off) = unique_core_offset(&right_lines, &left_lines, &base_lines) {
+                let core_len = base_lines.len();
+                let prefix = right_lines[..off].to_vec();
+                let core = right_lines[off..off + core_len].to_vec();
+                let suffix = right_lines[off + core_len..].to_vec();
+                if !prefix.is_empty() {
+                    emit(
+                        hunks,
+                        next_id,
+                        HunkKind::RightChange,
+                        Vec::new(),
+                        Vec::new(),
+                        prefix,
+                    );
+                }
+                emit(hunks, next_id, HunkKind::Conflict, base_lines, left_lines, core);
+                if !suffix.is_empty() {
+                    emit(
+                        hunks,
+                        next_id,
+                        HunkKind::RightChange,
+                        Vec::new(),
+                        Vec::new(),
+                        suffix,
+                    );
+                }
+                return;
+            }
         }
     }
     if kind == HunkKind::Unchanged && base_lines.is_empty() {
@@ -307,6 +430,7 @@ fn emit(
         right_line_ops,
     });
 }
+
 
 
 #[cfg(test)]
@@ -434,7 +558,45 @@ mod tests {
         let conflict = hunks.iter().find(|h| h.kind.is_conflict()).unwrap();
         assert!(conflict.left_lines.iter().any(|l| l == "MAIN"));
         assert!(conflict.right_lines.iter().any(|l| l == "FEATURE"));
+        assert!(!conflict.left_lines.iter().any(|l| l == "BLUE"));
     }
+
+    #[test]
+    fn multi_line_replace_vs_shorter_other_side_stays_conflict() {
+        let base = s(&["old"]);
+        let ours = s(&["a", "b"]);
+        let theirs = s(&["new"]);
+        let hunks = build_hunks(&base, &ours, &theirs);
+        assert!(
+            !hunks.iter().any(|h| h.kind.is_blue()),
+            "length-only peel must not turn a true multi-line replace into LeftChange"
+        );
+        assert_eq!(hunks.iter().filter(|h| h.kind.is_conflict()).count(), 1);
+        let conflict = hunks.iter().find(|h| h.kind.is_conflict()).unwrap();
+        assert_eq!(conflict.base_lines, s(&["old"]));
+        assert_eq!(conflict.left_lines, s(&["a", "b"]));
+        assert_eq!(conflict.right_lines, s(&["new"]));
+    }
+
+    #[test]
+    fn suffix_insert_after_replace_does_not_peel_replacement_as_blue() {
+        let base = s(&["line1", "line2", "line3"]);
+        let ours = s(&["line1", "MAIN", "BLUE", "line3"]);
+        let theirs = s(&["line1", "FEATURE", "line3"]);
+        let hunks = build_hunks(&base, &ours, &theirs);
+        for h in hunks.iter().filter(|h| h.kind.is_blue()) {
+            assert!(
+                !h.left_lines.iter().any(|l| l == "MAIN"),
+                "prefix peel must not mark MAIN as a blue insert"
+            );
+        }
+        let conflict = hunks.iter().find(|h| h.kind.is_conflict()).unwrap();
+        assert!(conflict.left_lines.iter().any(|l| l == "MAIN"));
+        assert!(conflict.right_lines.iter().any(|l| l == "FEATURE"));
+        let blue = hunks.iter().find(|h| h.kind.is_blue()).expect("BLUE should stay a left insert");
+        assert!(blue.left_lines.iter().any(|l| l == "BLUE"));
+    }
+
 
 
     #[test]
