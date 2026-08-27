@@ -1,8 +1,10 @@
 import type { ConflictFile } from "../types";
 
+export const BINARY_OPEN_MESSAGE = "Cannot open binary conflict in the 3-way editor";
+
 interface Props {
   conflicts: ConflictFile[];
-  onOpen: (path: string) => void;
+  onOpen: (file: ConflictFile) => void;
 }
 
 export function Overview({ conflicts, onOpen }: Props) {
@@ -20,8 +22,15 @@ export function Overview({ conflicts, onOpen }: Props) {
       </thead>
       <tbody>
         {conflicts.map((c) => (
-          <tr key={c.path} onDoubleClick={() => onOpen(c.path)}>
-            <td>{c.path}</td>
+          <tr
+            key={c.path}
+            title={c.is_binary ? BINARY_OPEN_MESSAGE : undefined}
+            onDoubleClick={() => onOpen(c)}
+          >
+            <td>
+              {c.path}
+              {c.is_binary ? " (binary)" : ""}
+            </td>
             <td>{c.ours_status}</td>
             <td>{c.theirs_status}</td>
           </tr>

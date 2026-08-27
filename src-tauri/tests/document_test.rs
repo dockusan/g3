@@ -42,3 +42,15 @@ fn rejects_path_with_parent_dir_component() {
     let result = document::load(&fx.repo, "../outside.txt");
     assert!(result.is_err());
 }
+
+#[test]
+fn refuses_binary_conflict_load() {
+    let fx = support::binary_modify_modify_conflict();
+    let result = document::load(&fx.repo, "file.txt");
+    assert!(result.is_err());
+    let msg = result.unwrap_err().message().to_lowercase();
+    assert!(
+        msg.contains("binary"),
+        "expected binary refusal, got: {msg}"
+    );
+}

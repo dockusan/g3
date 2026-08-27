@@ -1,14 +1,19 @@
 use crate::conflict::{parse_markers, ParsedRegion};
 use crate::diff::line_diff;
-use crate::git::{branch_labels, ensure_safe_relative_path};
+use crate::git::{branch_labels, ensure_safe_relative_path, is_binary_conflict};
 use crate::merge3::{build_hunks, split_lines};
 use crate::model::{ConflictDocument, Hunk, HunkKind};
 use git2::Repository;
+
+const BINARY_CONFLICT_MSG: &str = "cannot open binary conflict in the 3-way editor";
 
 /// Load a conflicted file as stage-based hunks when index stages exist;
 /// otherwise fall back to parsing conflict markers in the working tree.
 pub fn load(repo: &Repository, path: &str) -> Result<ConflictDocument, git2::Error> {
     ensure_safe_relative_path(path)?;
+    if is_binary_conflict(repo, path)? {
+        return Err(git2::Error::from_str(BINARY_CONFLICT_MSG));
+    }
     let (ours_label, theirs_label) = branch_labels(repo);
     let stages = crate::git::read_stages(repo, path)?;
 
@@ -49,7 +54,12 @@ pub fn load(repo: &Repository, path: &str) -> Result<ConflictDocument, git2::Err
     let workdir = repo
         .workdir()
         .ok_or_else(|| git2::Error::from_str("bare repo has no working directory"))?;
-    let raw = std::fs::read_to_string(workdir.join(path))
+    let bytes = std::fs::read(workdir.join(path))
+        .map_err(|e| git2::Error::from_str(&format!("read failed: {e}")))?;
+    if bytes.contains(&0u8) {
+        return Err(git2::Error::from_str(BINARY_CONFLICT_MSG));
+    }
+    let raw = String::from_utf8(bytes)
         .map_err(|e| git2::Error::from_str(&format!("read failed: {e}")))?;
     let trailing_newline = raw.ends_with('\n');
     let parsed = parse_markers(&raw);

@@ -42,6 +42,39 @@ fn is_binary_blob(repo: &Repository, oid: git2::Oid) -> bool {
     }
 }
 
+fn entry_path_eq(entry: &Option<git2::IndexEntry>, path: &str) -> bool {
+    entry
+        .as_ref()
+        .map(|x| String::from_utf8_lossy(&x.path) == path)
+        .unwrap_or(false)
+}
+
+fn any_stage_binary(
+    repo: &Repository,
+    ancestor: &Option<git2::IndexEntry>,
+    our: &Option<git2::IndexEntry>,
+    their: &Option<git2::IndexEntry>,
+) -> bool {
+    [ancestor, our, their]
+        .into_iter()
+        .any(|e| e.as_ref().is_some_and(|entry| is_binary_blob(repo, entry.id)))
+}
+
+/// True when any index stage (base / ours / theirs) for `path` contains a NUL.
+pub fn is_binary_conflict(repo: &Repository, path: &str) -> Result<bool, git2::Error> {
+    let index = repo.index()?;
+    for c in index.conflicts()? {
+        let c = c?;
+        if entry_path_eq(&c.ancestor, path)
+            || entry_path_eq(&c.our, path)
+            || entry_path_eq(&c.their, path)
+        {
+            return Ok(any_stage_binary(repo, &c.ancestor, &c.our, &c.their));
+        }
+    }
+    Ok(false)
+}
+
 pub fn list_conflicts(repo: &Repository) -> Result<Vec<ConflictFile>, git2::Error> {
     let index = repo.index()?;
     let conflicts = index.conflicts()?;
@@ -61,9 +94,7 @@ pub fn list_conflicts(repo: &Repository) -> Result<Vec<ConflictFile>, git2::Erro
         let ours_status = side_status(c.ancestor.is_some(), c.our.is_some());
         let theirs_status = side_status(c.ancestor.is_some(), c.their.is_some());
 
-        let our_binary = c.our.as_ref().map_or(false, |e| is_binary_blob(repo, e.id));
-        let their_binary = c.their.as_ref().map_or(false, |e| is_binary_blob(repo, e.id));
-        let is_binary = our_binary || their_binary;
+        let is_binary = any_stage_binary(repo, &c.ancestor, &c.our, &c.their);
 
         out.push(ConflictFile {
             path,
@@ -90,12 +121,10 @@ pub fn read_stages(repo: &Repository, path: &str) -> Result<Stages, git2::Error>
     let mut theirs = None;
     for c in index.conflicts()? {
         let c = c?;
-        let matches = |e: &Option<git2::IndexEntry>| {
-            e.as_ref()
-                .map(|x| String::from_utf8_lossy(&x.path) == path)
-                .unwrap_or(false)
-        };
-        if matches(&c.ancestor) || matches(&c.our) || matches(&c.their) {
+        if entry_path_eq(&c.ancestor, path)
+            || entry_path_eq(&c.our, path)
+            || entry_path_eq(&c.their, path)
+        {
             if let Some(e) = &c.ancestor {
                 base = blob_to_string(repo, e.id);
             }

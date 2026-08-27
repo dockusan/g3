@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type UIEvent } from "react";
-import type { ConflictDocument, Hunk } from "../types";
+import type { ConflictDocument, Hunk, HunkKind } from "../types";
 import { isBlue, isConflict } from "../types";
 import {
   initDecisions,
@@ -11,6 +11,13 @@ import {
   serializeResult,
   type Decisions,
 } from "../logic/hunks";
+
+/** Accept belongs on the changed side of a one-sided blue hunk. */
+export function showAccept(side: "left" | "right", kind: HunkKind): boolean {
+  if (kind === "left_change") return side === "left";
+  if (kind === "right_change") return side === "right";
+  return kind === "both_same" || kind === "conflict";
+}
 
 interface Props {
   doc: ConflictDocument;
@@ -88,9 +95,11 @@ export function MergeEditor({ doc, onSave, onCancel }: Props) {
             <div key={`L-${i}`} className={hunkClass(h)}>
               {h.id != null && (
                 <div className="gutter">
-                  <button type="button" title="Accept left" onClick={() => setDecisions((d) => applyDecision(d, h.id!, "accepted_left"))}>
-                    »
-                  </button>
+                  {showAccept("left", h.kind) && (
+                    <button type="button" title="Accept left" onClick={() => setDecisions((d) => applyDecision(d, h.id!, "accepted_left"))}>
+                      »
+                    </button>
+                  )}
                   <button type="button" title="Keep base" onClick={() => setDecisions((d) => applyDecision(d, h.id!, "keep_base"))}>
                     X
                   </button>
@@ -112,9 +121,11 @@ export function MergeEditor({ doc, onSave, onCancel }: Props) {
             <div key={`R-${i}`} className={hunkClass(h)}>
               {h.id != null && (
                 <div className="gutter">
-                  <button type="button" title="Accept right" onClick={() => setDecisions((d) => applyDecision(d, h.id!, "accepted_right"))}>
-                    «
-                  </button>
+                  {showAccept("right", h.kind) && (
+                    <button type="button" title="Accept right" onClick={() => setDecisions((d) => applyDecision(d, h.id!, "accepted_right"))}>
+                      «
+                    </button>
+                  )}
                   <button type="button" title="Keep base" onClick={() => setDecisions((d) => applyDecision(d, h.id!, "keep_base"))}>
                     X
                   </button>

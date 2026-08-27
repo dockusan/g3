@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ConflictFile, ConflictDocument } from "./types";
 import { listConflicts, setRepo, loadConflict, saveResolution } from "./api";
-import { Overview } from "./screens/Overview";
+import { Overview, BINARY_OPEN_MESSAGE } from "./screens/Overview";
 import { MergeEditor } from "./screens/MergeEditor";
 import "./App.css";
 
@@ -38,10 +38,14 @@ export default function App() {
     }
   };
 
-  const openFile = async (path: string) => {
+  const openFile = async (file: ConflictFile) => {
     setError(null);
+    if (file.is_binary) {
+      setError(BINARY_OPEN_MESSAGE);
+      return;
+    }
     try {
-      const doc = await loadConflict(path);
+      const doc = await loadConflict(file.path);
       setView({ screen: "editor", doc });
     } catch (e) {
       setError(String(e));

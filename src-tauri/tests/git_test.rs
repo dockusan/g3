@@ -33,6 +33,7 @@ fn flags_conflict_as_binary_when_only_theirs_side_is_binary() {
     // "ours" (main) is text, "theirs" (feature) is binary; is_binary must be true
     // because either side being binary should mark the conflict as binary.
     assert!(conflicts[0].is_binary);
+    assert!(git::is_binary_conflict(&fx.repo, "file.txt").unwrap());
 }
 
 #[test]
