@@ -562,7 +562,7 @@ mod tests {
     }
 
     #[test]
-    fn multi_line_replace_vs_shorter_other_side_stays_conflict() {
+    fn multiline_replace_vs_shorter_stays_conflict() {
         let base = s(&["old"]);
         let ours = s(&["a", "b"]);
         let theirs = s(&["new"]);
@@ -579,7 +579,7 @@ mod tests {
     }
 
     #[test]
-    fn suffix_insert_after_replace_does_not_peel_replacement_as_blue() {
+    fn suffix_insert_does_not_peel_replacement_as_blue() {
         let base = s(&["line1", "line2", "line3"]);
         let ours = s(&["line1", "MAIN", "BLUE", "line3"]);
         let theirs = s(&["line1", "FEATURE", "line3"]);
