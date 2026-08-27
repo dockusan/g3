@@ -1,12 +1,16 @@
-import { useMemo, useState } from "react";
-import type { ConflictDocument, Region } from "../types";
+import { useMemo, useRef, useState, type UIEvent } from "react";
+import type { ConflictDocument, Hunk } from "../types";
+import { isBlue, isConflict } from "../types";
 import {
   initDecisions,
   applyDecision,
-  countRemaining,
+  applyNonConflicting,
+  acceptAllConflicts,
+  countPendingChanges,
+  countPendingConflicts,
   serializeResult,
   type Decisions,
-} from "../logic/panes";
+} from "../logic/hunks";
 
 interface Props {
   doc: ConflictDocument;
@@ -14,59 +18,128 @@ interface Props {
   onCancel: () => void;
 }
 
-function sideLines(regions: Region[], side: "ours" | "theirs"): string[] {
-  const out: string[] = [];
-  for (const r of regions) {
-    if (r.kind === "merged") out.push(...r.lines);
-    else out.push(...r[side]);
-  }
-  return out;
+function hunkClass(h: Hunk): string {
+  if (isConflict(h.kind)) return "hunk conflict";
+  if (isBlue(h.kind)) return "hunk change";
+  return "hunk";
 }
 
 export function MergeEditor({ doc, onSave, onCancel }: Props) {
-  const [decisions, setDecisions] = useState<Decisions>(() => initDecisions(doc.regions));
+  const [decisions, setDecisions] = useState<Decisions>(() => initDecisions(doc.hunks));
+  const leftRef = useRef<HTMLDivElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
+  const rightRef = useRef<HTMLDivElement>(null);
+  const syncing = useRef(false);
 
-  const ours = useMemo(() => sideLines(doc.regions, "ours"), [doc]);
-  const theirs = useMemo(() => sideLines(doc.regions, "theirs"), [doc]);
-  const result = useMemo(() => serializeResult(doc.regions, decisions), [doc, decisions]);
-  const remaining = countRemaining(doc.regions, decisions);
+  const result = useMemo(
+    () => serializeResult(doc.hunks, decisions, doc.trailing_newline),
+    [doc, decisions],
+  );
+  const pendingChanges = countPendingChanges(doc.hunks, decisions);
+  const pendingConflicts = countPendingConflicts(doc.hunks, decisions);
 
-  const conflictIds = doc.regions
-    .filter((r): r is Extract<Region, { kind: "conflict" }> => r.kind === "conflict")
-    .map((r) => r.id);
-
-  const acceptAll = (kind: "accepted_ours" | "accepted_theirs") => {
-    let d = decisions;
-    for (const id of conflictIds) d = applyDecision(d, id, kind);
-    setDecisions(d);
+  const onScroll = (source: "left" | "result" | "right") => (e: UIEvent<HTMLDivElement>) => {
+    if (syncing.current) return;
+    syncing.current = true;
+    const top = e.currentTarget.scrollTop;
+    for (const [name, ref] of [
+      ["left", leftRef],
+      ["result", resultRef],
+      ["right", rightRef],
+    ] as const) {
+      if (name !== source && ref.current) ref.current.scrollTop = top;
+    }
+    syncing.current = false;
   };
 
   return (
     <div className="editor">
-      <header>
-        <span>{doc.path}</span>
-        <span>{remaining === 0 ? "No changes. Resolved." : `${remaining} conflict(s) remaining`}</span>
+      <header className="editor-toolbar">
+        <div className="toolbar-group">
+          <span>Apply non-conflicting changes:</span>
+          <button type="button" onClick={() => setDecisions((d) => applyNonConflicting(d, doc.hunks, "left"))}>
+            » Left
+          </button>
+          <button type="button" onClick={() => setDecisions((d) => applyNonConflicting(d, doc.hunks, "all"))}>
+            » All
+          </button>
+          <button type="button" onClick={() => setDecisions((d) => applyNonConflicting(d, doc.hunks, "right"))}>
+            « Right
+          </button>
+        </div>
+        <div className="toolbar-group">
+          <select disabled defaultValue="do-not-ignore" aria-label="Whitespace">
+            <option value="do-not-ignore">Do not ignore</option>
+          </select>
+          <select disabled defaultValue="do-not-highlight" aria-label="Highlight">
+            <option value="do-not-highlight">Do not highlight</option>
+          </select>
+        </div>
+        <span className="toolbar-status">
+          {pendingChanges} change{pendingChanges === 1 ? "" : "s"}. {pendingConflicts} conflict
+          {pendingConflicts === 1 ? "" : "s"}.
+        </span>
       </header>
+
       <div className="panes">
-        <pre className="pane ours">
-          <div className="pane-title">{doc.ours_label}</div>
-          {ours.join("\n")}
-        </pre>
-        <pre className="pane result">
+        <div className="pane ours" ref={leftRef} onScroll={onScroll("left")}>
+          <div className="pane-title">Changes from {doc.ours_label}</div>
+          {doc.hunks.map((h, i) => (
+            <div key={`L-${i}`} className={hunkClass(h)}>
+              {h.id != null && (
+                <div className="gutter">
+                  <button type="button" title="Accept left" onClick={() => setDecisions((d) => applyDecision(d, h.id!, "accepted_left"))}>
+                    »
+                  </button>
+                  <button type="button" title="Keep base" onClick={() => setDecisions((d) => applyDecision(d, h.id!, "keep_base"))}>
+                    X
+                  </button>
+                </div>
+              )}
+              <pre>{(h.left_lines.length ? h.left_lines : [""]).join("\n")}</pre>
+            </div>
+          ))}
+        </div>
+
+        <div className="pane result" ref={resultRef} onScroll={onScroll("result")}>
           <div className="pane-title">Result</div>
-          {result}
-        </pre>
-        <pre className="pane theirs">
-          <div className="pane-title">{doc.theirs_label}</div>
-          {theirs.join("\n")}
-        </pre>
+          <pre>{result}</pre>
+        </div>
+
+        <div className="pane theirs" ref={rightRef} onScroll={onScroll("right")}>
+          <div className="pane-title">Changes from {doc.theirs_label}</div>
+          {doc.hunks.map((h, i) => (
+            <div key={`R-${i}`} className={hunkClass(h)}>
+              {h.id != null && (
+                <div className="gutter">
+                  <button type="button" title="Accept right" onClick={() => setDecisions((d) => applyDecision(d, h.id!, "accepted_right"))}>
+                    «
+                  </button>
+                  <button type="button" title="Keep base" onClick={() => setDecisions((d) => applyDecision(d, h.id!, "keep_base"))}>
+                    X
+                  </button>
+                </div>
+              )}
+              <pre>{(h.right_lines.length ? h.right_lines : [""]).join("\n")}</pre>
+            </div>
+          ))}
+        </div>
       </div>
+
       <footer>
-        <button onClick={() => acceptAll("accepted_ours")}>Accept Left</button>
-        <button onClick={() => acceptAll("accepted_theirs")}>Accept Right</button>
+        <button type="button" onClick={() => setDecisions((d) => acceptAllConflicts(d, doc.hunks, "left"))}>
+          Accept Left
+        </button>
+        <button type="button" onClick={() => setDecisions((d) => acceptAllConflicts(d, doc.hunks, "right"))}>
+          Accept Right
+        </button>
         <span className="spacer" />
-        <button onClick={onCancel}>Cancel</button>
-        <button disabled={remaining > 0} onClick={() => onSave(result)}>Apply</button>
+        <button type="button" onClick={onCancel}>
+          Cancel
+        </button>
+        <button type="button" disabled={pendingConflicts > 0} onClick={() => onSave(result)}>
+          Apply
+        </button>
       </footer>
     </div>
   );

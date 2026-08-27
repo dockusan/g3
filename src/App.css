@@ -115,12 +115,30 @@ button {
   }
 }
 
-.panes { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; }
-.pane { overflow: auto; padding: 8px; background: #1e1e1e; color: #ddd; font-family: monospace; white-space: pre; }
-.pane-title { color: #888; margin-bottom: 6px; }
 .overview { width: 100%; border-collapse: collapse; }
 .overview th, .overview td { text-align: left; padding: 6px 12px; border-bottom: 1px solid #333; }
 .overview tr:hover { background: #2a2a2a; cursor: pointer; }
 footer { display: flex; gap: 8px; padding: 8px; }
 footer .spacer { flex: 1; }
 .error { background: #5a1d1d; color: #fff; padding: 8px; cursor: pointer; }
+
+.editor { display: flex; flex-direction: column; height: 100vh; }
+.editor-toolbar {
+  display: flex; gap: 16px; align-items: center; flex-wrap: wrap;
+  padding: 8px 12px; border-bottom: 1px solid #333; background: #252525; color: #ccc;
+  font-size: 13px;
+}
+.toolbar-group { display: flex; gap: 6px; align-items: center; }
+.toolbar-status { margin-left: auto; color: #aaa; }
+.panes { flex: 1; min-height: 0; display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px; }
+.pane { overflow: auto; padding: 0; background: #1e1e1e; color: #ddd; font-family: monospace; }
+.pane-title { color: #888; padding: 8px; position: sticky; top: 0; background: #1e1e1e; z-index: 1; }
+.hunk { display: grid; grid-template-columns: auto 1fr; }
+.hunk pre { margin: 0; padding: 0 8px; white-space: pre; }
+.hunk.conflict { background: rgba(120, 60, 40, 0.45); }
+.hunk.change { background: rgba(40, 80, 140, 0.45); }
+.gutter { display: flex; flex-direction: column; gap: 2px; padding: 2px; }
+.gutter button {
+  font-size: 11px; padding: 0 4px; min-width: 0; line-height: 1.4;
+}
+.pane.result pre { padding: 8px; margin: 0; white-space: pre; }
