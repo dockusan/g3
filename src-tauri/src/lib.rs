@@ -1,6 +1,7 @@
 pub mod model;
 pub mod conflict;
 pub mod diff;
+pub mod merge3;
 pub mod document;
 pub mod git;
 pub mod writer;
