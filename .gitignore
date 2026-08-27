@@ -12,7 +12,12 @@ dist
 dist-ssr
 *.local
 src-tauri/target
-docs/superpowers/
+# Keep agent scratch out of git; commit specs and plans.
+docs/superpowers/*
+!docs/superpowers/specs/
+!docs/superpowers/specs/**
+!docs/superpowers/plans/
+!docs/superpowers/plans/**
 
 # Editor directories and files
 .vscode/*
