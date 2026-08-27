@@ -50,3 +50,42 @@ pub struct ConflictDocument {
     pub total_conflicts: u32,
     pub content_hash: String,
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum HunkKind {
+    Unchanged,
+    LeftChange,
+    RightChange,
+    BothSame,
+    Conflict,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct Hunk {
+    /// Present only for actionable hunks (not `Unchanged`).
+    pub id: Option<u32>,
+    pub kind: HunkKind,
+    pub base_lines: Vec<String>,
+    pub left_lines: Vec<String>,
+    pub right_lines: Vec<String>,
+    pub left_line_ops: Vec<LineOp>,
+    pub right_line_ops: Vec<LineOp>,
+}
+
+impl HunkKind {
+    pub fn is_blue(self) -> bool {
+        matches!(
+            self,
+            HunkKind::LeftChange | HunkKind::RightChange | HunkKind::BothSame
+        )
+    }
+
+    pub fn is_conflict(self) -> bool {
+        matches!(self, HunkKind::Conflict)
+    }
+
+    pub fn is_actionable(self) -> bool {
+        !matches!(self, HunkKind::Unchanged)
+    }
+}
