@@ -12,23 +12,38 @@ export type LineOp =
   | { op: "insert"; text: string }
   | { op: "delete"; text: string };
 
-export type Region =
-  | { kind: "merged"; lines: string[] }
-  | {
-      kind: "conflict";
-      id: number;
-      ours: string[];
-      theirs: string[];
-      base: string[] | null;
-      ours_line_ops: LineOp[];
-      theirs_line_ops: LineOp[];
-    };
+export type HunkKind =
+  | "unchanged"
+  | "left_change"
+  | "right_change"
+  | "both_same"
+  | "conflict";
+
+export interface Hunk {
+  id: number | null;
+  kind: HunkKind;
+  base_lines: string[];
+  left_lines: string[];
+  right_lines: string[];
+  left_line_ops: LineOp[];
+  right_line_ops: LineOp[];
+}
 
 export interface ConflictDocument {
   path: string;
   ours_label: string;
   theirs_label: string;
-  regions: Region[];
-  total_conflicts: number;
+  hunks: Hunk[];
+  change_count: number;
+  conflict_count: number;
   content_hash: string;
+  trailing_newline: boolean;
+}
+
+export function isBlue(kind: HunkKind): boolean {
+  return kind === "left_change" || kind === "right_change" || kind === "both_same";
+}
+
+export function isConflict(kind: HunkKind): boolean {
+  return kind === "conflict";
 }
