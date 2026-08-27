@@ -26,32 +26,18 @@ pub enum LineOp {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(tag = "kind", rename_all = "lowercase")]
-pub enum Region {
-    Merged {
-        lines: Vec<String>,
-    },
-    Conflict {
-        id: u32,
-        ours: Vec<String>,
-        theirs: Vec<String>,
-        base: Option<Vec<String>>,
-        ours_line_ops: Vec<LineOp>,
-        theirs_line_ops: Vec<LineOp>,
-    },
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct ConflictDocument {
     pub path: String,
     pub ours_label: String,
     pub theirs_label: String,
-    pub regions: Vec<Region>,
-    pub total_conflicts: u32,
+    pub hunks: Vec<Hunk>,
+    pub change_count: u32,
+    pub conflict_count: u32,
     pub content_hash: String,
+    pub trailing_newline: bool,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum HunkKind {
     Unchanged,

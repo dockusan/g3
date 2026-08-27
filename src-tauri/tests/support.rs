@@ -82,6 +82,56 @@ pub fn modify_modify_conflict() -> Fixture {
     Fixture { dir, repo }
 }
 
+/// Base file has line2 shared; main edits line2 (conflict) AND adds a unique
+/// left-only line after line1; feature only edits line2 differently.
+/// Expected after merge: 1 blue LeftChange (extra line) + 1 Conflict on line2.
+pub fn blue_and_red_conflict() -> Fixture {
+    let dir = TempDir::new().unwrap();
+    let repo = Repository::init(dir.path()).unwrap();
+
+    write(dir.path(), "file.txt", "line1\nline2\nline3\n");
+    commit_all(&repo, "base");
+
+    // Capture the actual initial branch name created by `Repository::init`,
+    // since it depends on the system/global `init.defaultBranch` config
+    // (commonly "main" on modern setups, but "master" elsewhere).
+    let default_branch = repo
+        .head()
+        .unwrap()
+        .name()
+        .expect("HEAD ref name should be valid UTF-8")
+        .to_string();
+
+    // feature branch changes line2
+    {
+        let base_commit = repo.head().unwrap().peel_to_commit().unwrap();
+        repo.branch("feature", &base_commit, false).unwrap();
+    }
+    repo.set_head("refs/heads/feature").unwrap();
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
+    write(dir.path(), "file.txt", "line1\nFEATURE\nline3\n");
+    commit_all(&repo, "feature change");
+
+    // back to the original default branch, change line2 differently + insert BLUE
+    repo.set_head(&default_branch).unwrap();
+    repo.checkout_head(Some(git2::build::CheckoutBuilder::new().force())).unwrap();
+    write(dir.path(), "file.txt", "line1\nBLUE\nMAIN\nline3\n");
+    commit_all(&repo, "main change");
+
+    // merge feature -> produces conflict
+    let feature_commit_id = repo
+        .find_branch("feature", git2::BranchType::Local).unwrap()
+        .get().peel_to_commit().unwrap()
+        .id();
+    {
+        let annotated = repo.find_annotated_commit(feature_commit_id).unwrap();
+        let mut opts = git2::MergeOptions::new();
+        repo.merge(&[&annotated], Some(&mut opts), None).unwrap();
+    }
+
+    Fixture { dir, repo }
+}
+
 /// Like `modify_modify_conflict`, but `feature` (which becomes "theirs" from the
 /// perspective of the merge) writes binary content (containing a null byte) for
 /// `file.txt`, while `main` (which becomes "ours") writes ordinary text.

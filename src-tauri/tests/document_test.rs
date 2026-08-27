@@ -1,30 +1,28 @@
 #[path = "support.rs"]
 mod support;
 
-use tauri_app_lib::{document, model::Region};
+use tauri_app_lib::{document, model::HunkKind};
 
 #[test]
-fn builds_document_with_one_conflict_region() {
+fn builds_document_with_one_conflict_hunk() {
     let fx = support::modify_modify_conflict();
     let doc = document::load(&fx.repo, "file.txt").unwrap();
     assert_eq!(doc.path, "file.txt");
-    assert_eq!(doc.total_conflicts, 1);
+    assert_eq!(doc.conflict_count, 1);
     assert!(!doc.content_hash.is_empty());
+    let conflict = doc.hunks.iter().find(|h| h.kind == HunkKind::Conflict).unwrap();
+    assert!(conflict.left_lines.iter().any(|l| l.contains("MAIN")));
+    assert!(conflict.right_lines.iter().any(|l| l.contains("FEATURE")));
+}
 
-    let conflict_count = doc.regions.iter()
-        .filter(|r| matches!(r, Region::Conflict { .. }))
-        .count();
-    assert_eq!(conflict_count, 1);
-
-    // The conflict carries ours/theirs content and diff ops.
-    for r in &doc.regions {
-        if let Region::Conflict { ours, theirs, ours_line_ops, theirs_line_ops, .. } = r {
-            assert!(ours.iter().any(|l| l.contains("MAIN")));
-            assert!(theirs.iter().any(|l| l.contains("FEATURE")));
-            assert!(!ours_line_ops.is_empty());
-            assert!(!theirs_line_ops.is_empty());
-        }
-    }
+#[test]
+fn blue_and_red_fixture_has_both() {
+    let fx = support::blue_and_red_conflict();
+    let doc = document::load(&fx.repo, "file.txt").unwrap();
+    assert!(doc.change_count >= 1);
+    assert_eq!(doc.conflict_count, 1);
+    assert!(doc.hunks.iter().any(|h| h.kind.is_blue()));
+    assert!(doc.hunks.iter().any(|h| h.kind.is_conflict()));
 }
 
 #[test]

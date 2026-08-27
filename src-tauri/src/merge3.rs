@@ -251,6 +251,40 @@ fn emit(
     left_lines: Vec<String>,
     right_lines: Vec<String>,
 ) {
+    // Adjacent one-sided inserts can be fused into a replace of the following
+    // line. Peel them back out so a left-only extra line stays blue.
+    if kind == HunkKind::Conflict && !base_lines.is_empty() {
+        if left_lines.len() > base_lines.len() && right_lines.len() == base_lines.len() {
+            let extra = left_lines.len() - base_lines.len();
+            let prefix = left_lines[..extra].to_vec();
+            let rest = left_lines[extra..].to_vec();
+            emit(
+                hunks,
+                next_id,
+                HunkKind::LeftChange,
+                Vec::new(),
+                prefix,
+                Vec::new(),
+            );
+            emit(hunks, next_id, HunkKind::Conflict, base_lines, rest, right_lines);
+            return;
+        }
+        if right_lines.len() > base_lines.len() && left_lines.len() == base_lines.len() {
+            let extra = right_lines.len() - base_lines.len();
+            let prefix = right_lines[..extra].to_vec();
+            let rest = right_lines[extra..].to_vec();
+            emit(
+                hunks,
+                next_id,
+                HunkKind::RightChange,
+                Vec::new(),
+                Vec::new(),
+                prefix,
+            );
+            emit(hunks, next_id, HunkKind::Conflict, base_lines, left_lines, rest);
+            return;
+        }
+    }
     if kind == HunkKind::Unchanged && base_lines.is_empty() {
         return;
     }
@@ -273,6 +307,7 @@ fn emit(
         right_line_ops,
     });
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -385,6 +420,22 @@ mod tests {
         let hunks = build_hunks(&base, &s(&["L"]), &s(&["R"]));
         assert_eq!(kinds(&hunks), vec![HunkKind::Conflict]);
     }
+
+    #[test]
+    fn left_insert_adjacent_to_conflict_is_blue_and_red() {
+        let base = s(&["line1", "line2", "line3"]);
+        let ours = s(&["line1", "BLUE", "MAIN", "line3"]);
+        let theirs = s(&["line1", "FEATURE", "line3"]);
+        let hunks = build_hunks(&base, &ours, &theirs);
+        assert!(hunks.iter().any(|h| h.kind.is_blue()));
+        assert_eq!(hunks.iter().filter(|h| h.kind.is_conflict()).count(), 1);
+        let blue = hunks.iter().find(|h| h.kind.is_blue()).unwrap();
+        assert!(blue.left_lines.iter().any(|l| l == "BLUE"));
+        let conflict = hunks.iter().find(|h| h.kind.is_conflict()).unwrap();
+        assert!(conflict.left_lines.iter().any(|l| l == "MAIN"));
+        assert!(conflict.right_lines.iter().any(|l| l == "FEATURE"));
+    }
+
 
     #[test]
     fn missing_side_treated_as_empty() {
